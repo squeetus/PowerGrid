@@ -1,0 +1,12 @@
+{
+    "devices":[{"withNode":"259415420","Device":"source"},
+               {"withNode":"260972201","Device":"pv"},
+               {"withNode":"260760894","Device":"pv"},
+               {"withNode":"261124239","Device":"pv"},
+               {"withNode":"258901496","Device":"pv"},
+               {"withNode":"632976355","Device":"pv"},
+               {"withNode":"258901702","Device":"pv"},
+               {"withNode":"259415420","Device":"voltageRegulator"}
+              ]
+}
+        

@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+    <style>
+
+    .background {
+      fill: none;
+      pointer-events: all;
+    }
+
+    #container {
+        position: relative;   
+    }
+
+    #dataView {
+        position: absolute;
+        min-width:150px;
+        min-height: 50px;
+        padding: 15px;
+        border-radius: 5px;
+        background-color: lightslategrey;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    #controls {
+        position: absolute;
+        padding: 5px;
+        border-radius: 5px;
+        top: 97%;
+        left: 20%;
+        background-color: lightgrey;
+        text-align: center;
+    }
+        
+    #format { 
+        margin-top: 2em; 
+    }
+        
+    #key {
+        position: absolute;
+        top: 250px;
+        left: 100px;
+    }   
+
+    </style>
+    
+    <link href="lib/bootstrap-3.3.4-dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="lib/jquery-1.11.2.min.js"></script>
+    <script src="lib/bootstrap-3.3.4-dist/js/bootstrap.min.js"></script>
+    <script src="//code.jquery.com/jquery-1.10.2.js"></script>
+	<script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+
+</head>
+
+<body>
+    
+<div id="container">
+
+<div id="dataView"></div>
+
+<div id="key">
+    <span style="background-color:gold">&nbsp&nbsp</span>Shunt Capacitor<br />
+    <span style="background-color:orange">&nbsp&nbsp</span>Recloser & Fuse<br />
+    <span style="background-color:blue">&nbsp&nbsp</span>Load<br />
+    <span style="background-color:purple">&nbsp&nbsp</span>Voltage Regulator<br />
+    <span style="background-color:red">&nbsp&nbsp</span>Source<br />
+    <span style="background-color:green">&nbsp&nbsp</span>PV<br />
+</div>    
+    
+<div id="controls">
+    <b>Controls<br /></b>
+    <div id="controlButtons">
+        <input id="shunt" type="checkbox" /><label for="shunt">Shunt</label>
+        <input id="recfuse" type="checkbox" /><label for="recfuse">Recloser & Fuse</label>
+        <input type="checkbox" id="load" /><label for="load">Load</label>
+        <input type="checkbox" id="voltreg" /><label for="voltreg">Voltage Regulator</label>
+        <input type="checkbox" id="source" /><label for="source">Source</label>
+        <input type="checkbox" id="pv" /><label for="pv">Pv</label>
+    </div>    
+</div>
+    <input type="button" id="toggleExample" />
+    
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://d3js.org/topojson.v1.min.js"></script>
+    
+<script>
+
+    
+////////////////////////////////////////////////////////
+//
+//      INIT
+//
+////////////////////////////////////////////////////////
+    
+function init() {
+    $("#controlButtons").buttonset();
+   
+    d3.select("#shunt").on("click", function() {
+        if($(this).hasClass('checked')) { $(this).removeClass('checked') } else { $(this).toggleClass('checked'); }
+        controlClick(0);
+    });
+    d3.select("#recfuse").on("click", function() {
+        if($(this).hasClass('checked')) { $(this).removeClass('checked') } else { $(this).toggleClass('checked'); }
+        controlClick(1);
+    });
+    d3.select("#load").on("click", function() {
+        if($(this).hasClass('checked')) { $(this).removeClass('checked') } else { $(this).toggleClass('checked'); }
+        controlClick(2);
+    });
+    d3.select("#voltreg").on("click", function() {
+        if($(this).hasClass('checked')) { $(this).removeClass('checked') } else { $(this).toggleClass('checked'); }
+        controlClick(3);
+    });
+    d3.select("#source").on("click", function() {
+        if($(this).hasClass('checked')) { $(this).removeClass('checked') } else { $(this).toggleClass('checked'); }
+        controlClick(4);
+    });
+    d3.select("#pv").on("click", function() {
+        if($(this).hasClass('checked')) { $(this).removeClass('checked') } else { $(this).toggleClass('checked'); }
+        controlClick(5);
+    });
+    
+    d3.select("#toggleExample").on("click", function() {
+        //if($(this).hasClass('checked')) { $(this).removeClass('checked') } else { $(this).toggleClass('checked'); }
+        toggleExampleCase();
+    });
+    
+    
+    getJson();
+}
+
+////////////////////////////////////////////////////////
+//
+//      GLOBALS
+//
+////////////////////////////////////////////////////////
+
+var width = window.innerWidth - 50, height = window.innerHeight - 50; 
+var xProj, yProj;
+var nodeSize = [3,6,11];
+var graphicSize = [20, 10];
+var lineWidth = 2;
+var scaleFactor = 1;
+var nodes, links, devices;
+var jsonFlag = false;
+var prevColor;
+
+var attributes = {
+    "shunt": false,
+    "recfuse": false,
+    "load": false,
+    "voltreg": false,
+    "source": false,
+    "pv": false,
+    key: function(n) {
+        return this[Object.keys(this)[n]];
+    }, 
+    toggle: function(n) {
+        this[Object.keys(this)[n]] ? this[Object.keys(this)[n]] = false : this[Object.keys(this)[n]] = true;
+    }
+};
+
+
+////////////////////////////////////////////////////////
+//
+//      D3 STUFF
+//
+////////////////////////////////////////////////////////
+    
+var svg = d3.select("#container").append("svg")
+    .attr("width", width)
+    .attr("height", height-25)
+   
+svg.append("rect")
+    .attr("class", "background")
+    .attr("width", width)
+    .attr("height", height);
+
+var g = svg.append("g")
+    .style("stroke-width", "1.5px");
+   
+
+////////////////////////////////////////////////////////
+//
+    
+//      JSON 
+    
+//      - Main Data
+    
+//      - Special Devices
+    
+//
+////////////////////////////////////////////////////////    
+
+function getJson() { 
+    d3.json("/KRS/data/out.json", function(error, data) {
+        width = data.bounds[1]-data.bounds[0]+50;
+        height = data.bounds[3]-data.bounds[2]+50;
+        width /= 5;
+        height /= 5;
+
+        var zoom = d3.behavior.zoom()
+            .scaleExtent([0.5,50])
+            .on("zoom", zoomHandler);
+            zoom.scale(1);
+        //zoom.translate([(width/2), 0]);
+
+        svg.call(zoom);
+
+        xProj = d3.scale.linear()
+        .domain([data.bounds[0], data.bounds[1]])
+        .range([width-5, 5]);
+
+        yProj = d3.scale.linear()
+        .domain([data.bounds[2], data.bounds[3]])
+        .range([height-5, 5]);
+
+        nodes = g.selectAll("node")
+                .data(data.nodes)
+            .enter().append("svg:circle")
+                .attr("id", function(d) { return "node" + d.nodeID; })
+                .attr("cx", function(d) { return xProj(d.x) + 400; })
+                .attr("cy", function(d) { return yProj(d.y); })
+                .attr("r", nodeSize[0])
+                .style("fill", "black")
+                .call(zoom);
+    
+        function getNodeById(id) {
+            return nodes.filter(
+                function(d){return d.nodeID == id});
+        }
+
+        links = g.selectAll("link")
+                .data(data.edges)
+            .enter().append("svg:line")
+                .attr("id", function(d) { return "edge" + d.edgeID; })
+                .attr("stroke", "black")
+                .attr("stroke-width", function(d) { return 2*d.phase.length; })
+                .attr("lineWidth", function(d) { return 2*d.phase.length || lineWidth; })
+                .attr("x1", function(d) {return xProj(getNodeById(d.node1).data()[0].x) + 400; })
+                .attr("y1", function(d) {return yProj(getNodeById(d.node1).data()[0].y); })
+                .attr("x2", function(d) {return xProj(getNodeById(d.node2).data()[0].x) + 400; })
+                .attr("y2", function(d) {return yProj(getNodeById(d.node2).data()[0].y); })
+                .on("mouseover", mouseover)
+                .on("mouseout", mouseout);
+
+      function getEdgeById(id) {
+            return g.selectAll("link").filter(
+                function(data){return data.edgeID == id});
+      }
+
+    });
+
+    setTimeout(function() {jsonFlag = true; json2();},50); 
+    
+}
+
+function json2() {
+    if (!jsonFlag) return;
+    
+    jsonFlag = false;
+    
+    d3.json("/KRS/data/devices.json", function(error, data) {
+
+        devices = g.selectAll("device")
+                    .data(data.devices)
+                //.enter().append("svg:circle") //but eventually icon
+                .enter().append("svg:rect") //but eventually icon
+                    .attr("id", function(d,i) {return "device" + i;} )
+                    .attr("x", function(d) {
+                        return getDeviceLocation(d).x;   
+                    })
+                    .attr("y", function(d) {
+                        return getDeviceLocation(d).y;   
+                    })
+//                    .attr("r", function(d) {
+//                        if(d.device == "Source")
+//                            return nodeSize[2];
+//                        else 
+//                            return nodeSize[1];
+//                    })
+                    .attr("width", graphicSize[0])
+                    .attr("height", graphicSize[1])
+                    .attr("fill", function(d) {
+                        switch(d.Device) {
+                            case "source":
+                                return "red";
+                                break;
+                            case "pv":
+                                return "green";
+                                break;
+                            case "voltageRegulator":
+                                return "purple";
+                                break;
+                            default:  
+                                return "lightgreen";
+                        }
+                    })
+                    .attr("opacity", "0");
+
+         setTimeout(function() {jsonFlag = true; controlClick();},50); 
+    });
+    
+    function getDeviceLocation(dev) {
+        var withNode = nodes.filter(function(d, i) { return d.nodeID == dev.withNode; });
+        var extra = 0;
+        if(dev.Device == "voltageRegulator")
+            extra = 1;
+        return {"x":xProj(withNode.data()[0].x)+400, "y":yProj(withNode.data()[0].y)+extra};
+        
+        // find all lines attached to node 
+        var potentialEdges = links.filter(function(d, i) { return (d.node1 == withNode.data()[0].nodeID || d.node2 == withNode.data()[0].nodeID) });
+        
+        //console.log(potentialEdges);
+        
+        // compare each edge to the attribute list
+//        potentialEdges.each(function(d) {
+//            console.log(d);
+//            if( d.shunt && attribues.key(0) )
+//        });
+
+        //console.log(potentialEdges);
+        
+    }
+    
+    setTimeout(function() {return;}, 50);
+}
+ 
+
+////////////////////////////////////////////////////////
+//
+//      EVENT HANDLERS
+//
+////////////////////////////////////////////////////////    
+    
+function zoomHandler() {
+    scaleFactor = d3.event.scale;
+    g.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+    nodes.attr("r", nodeSize[0]/scaleFactor);
+    links.attr("stroke-width", function(d) {
+        //console.log(d3.select("#edge" + d.edgeID).attr("stroke-width"));
+        return d3.select("#edge" + d.edgeID).attr("lineWidth")/scaleFactor;   
+    });
+//    devices.attr("r", function(d) {
+//        if (d.device == "Source")
+//            return nodeSize[2]/scaleFactor;
+//        else    
+//            return nodeSize[1]/scaleFactor;
+//    })
+    devices
+        .attr("width", function(d) {
+            if (d.device == "Source")
+                return 50/scaleFactor;
+            else    
+                return graphicSize[0]/scaleFactor;
+        })
+        .attr("height", function(d) {
+            if (d.device == "Source")
+                return 25/scaleFactor;
+            else    
+                return graphicSize[1]/scaleFactor;
+        });
+}    
+    
+
+function mouseover(d) {
+    var dataView = d3.select("#dataView");
+
+    var line = d3.select(this);
+    var node1 = d3.select("#node" + d3.select(this).data()[0].node1);
+    var node2 = d3.select("#node" + d3.select(this).data()[0].node2);
+
+    prevColor = (line.attr("stroke"));
+    
+    node1.attr("r", (nodeSize[0]+2)/scaleFactor)
+        .style("fill", "red");
+    node2.attr("r", (nodeSize[0]+2)/scaleFactor)
+        .style("fill", "red");
+    line.attr("stroke-width", function(d) { 
+        return (d3.select("#edge" + d.edgeID).attr("lineWidth")*1+2)/scaleFactor
+    })
+        .attr("stroke", "red"); 
+    dataView.style("left", d3.event.pageX+100 + "px")
+        .style("top", d3.event.pageY - 25 + "px");
+
+    showData(line);
+}
+
+function mouseout() {
+    var line = d3.select(this);
+    var node1 = d3.select("#node" + d3.select(this).data()[0].node1);
+    var node2 = d3.select("#node" + d3.select(this).data()[0].node2);
+
+    node1.attr("r", nodeSize[0]/scaleFactor)
+        .style("fill", "black");
+    node2.attr("r", nodeSize[0]/scaleFactor)
+        .style("fill", "black");
+    line.attr("stroke-width", function(d) { 
+        return (d3.select("#edge" + d.edgeID).attr("lineWidth"))/scaleFactor
+    })
+        .attr("stroke", prevColor); 
+
+    showData(null);
+}
+
+function showData(line) {
+    var dataView = d3.select("#dataView");
+    if(line == null) {
+        dataView.style("opacity", "0");
+        dataView.text("");
+    } else {  
+        dataView.style("opacity", ".95");
+        var info = "";
+        info += "Shunt Capacitor: ";
+        info += (line.data()[0].shuntCapacitor);
+        info += "<br />Voltage Regulator: ";
+        info += (line.data()[0].voltageRegulator);
+        info += "<br />Load: ";
+        info += (line.data()[0].load);
+        info += "<br />Switch: ";
+        info += (line.data()[0].switch);
+        info += "<br />Fuse: ";
+        info += (line.data()[0].fuse);
+        info += "<br />Phase: ";
+        info += (line.data()[0].phase);
+        info += "<br />ID: ";
+        info += line.data()[0].edgeID;
+        dataView.html(info);
+    }
+}
+    
+function controlClick(i) {
+    if (!jsonFlag) return;
+    
+    attributes.toggle(i);
+    
+    links
+        .attr("stroke", function(d, i) { 
+            if((d.shuntCapacitor == "true")  && attributes.key(0)) 
+                return "gold";
+            else if((d.fuse == "true")  && attributes.key(1))
+                return "orange";
+            else if((d.load == "true")  && attributes.key(2))
+                return "blue";
+            else    
+                return "black";
+        })
+    
+   devices
+        .attr("opacity", function(d) {
+            if((d.Device == "shunt" && attributes.key(0)) ||
+           (d.Device == "fuse" && attributes.key(1)) ||
+           (d.Device == "load" && attributes.key(2)) ||
+           (d.Device == "voltageRegulator" && attributes.key(3)) ||
+            (d.Device == "source" && attributes.key(4)) ||
+            (d.Device == "pv" && attributes.key(5)))
+                return .9; 
+            else 
+                return 0;
+        });
+}
+    
+function toggleExampleCase() {
+    var flagLines = [258901441,
+                    258901448,
+                    258901453,
+                    258901458,
+                    258901463,
+                    258901463,
+                    258901468,
+                    258901478,
+                    258901478,
+                    258901485,
+                    258901490,
+                    258901495,
+                    258901500,
+                    258901505,
+                    258901505,
+                    258901505,
+                    258901655,
+                    258901660,
+                    258901675,
+                    258901680,
+                    258901685,
+                    258901690,
+                    258901695,
+                    258901700,
+                    258901705,
+                    258901985,
+                    258901990,
+                    258901995,
+                    258902000,
+                    258902005,
+                    259357172,
+                    259357177,
+                    259421771,
+                    259430619,
+                    259430684,
+                    259481394,
+                    259481399,
+                    259482006,
+                    259557474,
+                    259987967,
+                    259987972,
+                    259999638,
+                    260760837,
+                    260760907,
+                    260760907,
+                    260760912,
+                    260760917,
+                    260908042,
+                    260908047,
+                    260908047,
+                    260908052,
+                    260966845,
+                    260966850,
+                    260966855,
+                    260972199,
+                    260972204,
+                    261095662,
+                    261108939,
+                    261198266,
+                    261227534,
+                    263532128,
+                    263532137,
+                    263532141,
+                    263532146,
+                    263532150,
+                    263532155,
+                    263532155,
+                    263532159,
+                    263532164,
+                    263532173,
+                    263532173,
+                    263532182,
+                    263532191,
+                    263532353,
+                    263532362,
+                    263701669,
+                    263849344,
+                    263851299,
+                    263864508,
+                    263920205,
+                    263920214,
+                    263920214,
+                    263920214,
+                    264145976,
+                    264324128,
+                    264324128,
+                    264324132,
+                    264324132,
+                    264324132,
+                    264546397,
+                    264546397,
+                    617082534,
+                    617082536,
+                    617082558,
+                    617082559,
+                    624107591,
+                    632976357,
+                    632976357,
+                    632976358,
+                    699064057,
+                    699064059,
+                    699064081,
+                    699064082];
+    
+    var uniques = [];
+    $.each(flagLines, function(i, el){
+        if($.inArray(el, uniques) === -1) uniques.push(el);
+    });
+
+    var examples = links.filter(function(d) { 
+        
+       return (uniques.indexOf(d.edgeID*1) >= 0); 
+    });
+
+    d3.select("#edge259482011").style("stroke-dasharray", ("3, 3"));
+    examples.
+        attr("stroke", "red");
+
+}
+    
+    
+$(document).ready( function () {
+    init();
+});
+   
+    
+
+</script>
+</div>
